@@ -26,6 +26,7 @@ from ray.data._internal.compute import ComputeStrategy
 from ray.data._internal.datasource.audio_datasource import AudioDatasource
 from ray.data._internal.datasource.avro_datasource import AvroDatasource
 from ray.data._internal.datasource.bigquery_datasource import BigQueryDatasource
+from ray.data._internal.datasource.hdf5_datasource import HDF5Datasource
 from ray.data._internal.datasource.binary_datasource import BinaryDatasource
 from ray.data._internal.datasource.clickhouse_datasource import ClickHouseDatasource
 from ray.data._internal.datasource.csv_datasource import CSVDatasource
@@ -733,6 +734,33 @@ def read_videos(
         include_paths=include_paths,
         include_timestamps=include_timestamps,
         file_extensions=file_extensions,
+    )
+    return read_datasource(
+        datasource,
+        ray_remote_args=ray_remote_args,
+        num_cpus=num_cpus,
+        num_gpus=num_gpus,
+        memory=memory,
+        concurrency=concurrency,
+        override_num_blocks=override_num_blocks,
+    )
+    
+def read_hdf5(
+    path: str,
+    chunk_shape: List[int],
+    array_paths: List[str] | None = None,
+    *,
+    concurrency: Optional[int] = None,
+    override_num_blocks: Optional[int] = None,
+    num_cpus: Optional[float] = None,
+    num_gpus: Optional[float] = None,
+    memory: Optional[float] = None,
+    ray_remote_args: Optional[Dict[str, Any]] = None,   
+):
+    datasource = HDF5Datasource(
+        path = path,
+        chunk_shape = chunk_shape,
+        array_paths = array_paths
     )
     return read_datasource(
         datasource,
