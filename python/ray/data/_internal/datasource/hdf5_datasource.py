@@ -1,5 +1,4 @@
 
-import h5py
 from __future__ import annotations
 
 import json
@@ -17,6 +16,7 @@ import pandas as pd
 from ray.data._internal.util import _check_import
 from ray.data.block import BlockMetadata
 from ray.data.datasource.datasource import Datasource, ReadTask
+import h5py
 
 
 
