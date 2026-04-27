@@ -212,7 +212,7 @@ class HDF5Datasource(Datasource):
     ) -> List[ReadTask]:
         
         read_tasks: List[ReadTask] = []
-        batch: list[dict[str, object]] = {}
+        batch: list[dict[str, object]] = []
         
         num_chunks = sum(prod(value['grid_shape']) for _, value in self._grid_shape_dict.items())
         parallelism = min(parallelism, num_chunks) if num_chunks > 0 else 1
