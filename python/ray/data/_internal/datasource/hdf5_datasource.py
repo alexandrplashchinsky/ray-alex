@@ -31,6 +31,41 @@ def make_json_safe(value):
     return value
 
 
+def _create_read_fn(
+    batch: list[dict[str, object]],
+    chunk_shape: tuple
+) -> Callable[[], Iterable[pd.DataFrame]]:
+    
+    def read_fn() -> Iterable[pd.DataFrame]:
+        arrays = []
+        array_shapes = []
+        chunk_shapes = []
+        dtypes = []
+        full_chunk_slices = []
+        
+        for row in batch:
+            chunk_slices = []
+            for i, size, chunk in zip(row['chunk_index'], row['meta']['shape'], chunk_shape):
+                start = i * chunk
+                stop = min((i + 1) * chunk, size)
+                chunk_slices.append((start, stop))
+            full_chunk_slices.append(chunk_slices)
+            arrays.append(row['array'])
+            array_shapes.append(row['meta']['shape'])
+            chunk_shapes.append(chunk_shape)
+            dtypes.append(row['meta']['dtype'])
+        
+        yield pd.DataFrame({
+            "array": arrays,
+            "array_shape": array_shapes,
+            "chunk_shape": chunk_shapes,
+            "dtype": dtypes,
+            "chunk_slices": full_chunk_slices
+        })
+    
+    return read_fn
+
+
 class HDF5Datasource(Datasource):
     
     def __init__(
@@ -150,6 +185,24 @@ class HDF5Datasource(Datasource):
         
         return full_bytes_estimate
     
+    def _sizeof_batch(self, obj, seen=None):
+        if seen is None:
+            seen = set()
+
+        obj_id = id(obj)
+        if obj_id in seen:
+            return 0
+        seen.add(obj_id)
+
+        size = sys.getsizeof(obj)
+
+        if isinstance(obj, dict):
+            size += sum(self._sizeof_batch(k, seen) + self._sizeof_batch(v, seen) for k, v in obj.items())
+        elif isinstance(obj, (list, tuple, set, frozenset)):
+            size += sum(self._sizeof_batch(x, seen) for x in obj)
+
+        return size
+    
     
     def get_read_tasks(
         self,
@@ -159,10 +212,47 @@ class HDF5Datasource(Datasource):
     ) -> List[ReadTask]:
         
         read_tasks: List[ReadTask] = []
+        batch: list[dict[str, object]] = {}
         
+        num_chunks = sum(prod(value['grid_shape']) for _, value in self._grid_shape_dict.items())
+        parallelism = min(parallelism, num_chunks) if num_chunks > 0 else 1
+        batch_size = math.ceil(num_chunks / parallelism)
         
-        
-        
-        
+        for array, data in self._grid_shape_dict.items():
+            for chunk_index in product(*(range(n) for n in data['grid_shape'])):
+                
+                batch.append({"array": array, "meta": data['meta'], "chunk_index": chunk_index})
+                
+                if len(batch) >= batch_size:
+                    read_tasks.append(
+                        ReadTask(
+                            _create_read_fn(
+                                batch,
+                                self.chunk_shape
+                            ),
+                            BlockMetadata(
+                                num_rows = len(batch),
+                                size_bytes = self._sizeof_batch(batch),
+                                input_files = [self.paths[0]],
+                                exec_stats = None
+                            )
+                        )
+                    )
+                    batch = []
+        if batch:
+            read_tasks.append(
+                ReadTask(
+                    _create_read_fn(
+                        batch,
+                        self.chunk_shape
+                    ),
+                    BlockMetadata(
+                        num_rows=len(batch),
+                        size_bytes=self._sizeof_batch(batch),
+                        input_files=[self.paths[0]],
+                        exec_stats=None
+                    )
+                )
+            )
         
         return read_tasks
