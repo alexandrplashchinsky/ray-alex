@@ -757,6 +757,59 @@ def read_hdf5(
     memory: Optional[float] = None,
     ray_remote_args: Optional[Dict[str, Any]] = None,   
 ):
+    """Creates a :class:`~ray.data.Dataset` from an HDF5 file.
+
+    Each row in the resulting dataset describes a single chunk from one of the
+    selected datasets in the file. The returned rows contain the dataset path,
+    shape, dtype, effective chunk shape, per-dimension slice bounds that can
+    be used to query the chunk, and per-dimension padding for truncated edge
+    chunks, but the datasource doesn't materialize any dataset or chunk data.
+
+    The column names are ``"array"``, ``"array_shape"``, ``"chunk_shape"``,
+    ``"dtype"``, ``"chunk_slices"``, and ``"padding"``.
+
+    Examples:
+        >>> import ray
+        >>> ds = ray.data.read_hdf5(  # doctest: +SKIP
+        ...     "/path/to/file.h5",
+        ...     chunk_shape=[256, 256],
+        ... )
+
+        Read specific datasets from a file.
+
+        >>> ds = ray.data.read_hdf5(  # doctest: +SKIP
+        ...     "/path/to/file.h5",
+        ...     chunk_shape=[256, 256],
+        ...     array_paths=["/images", "/labels"],
+        ... )
+
+    Args:
+        path: Path to the HDF5 file.
+        chunk_shape: Chunk shape to use when generating chunk descriptors for
+            each selected dataset. The chunk shape must have the same number of
+            dimensions as each selected dataset.
+        array_paths: Optional list of dataset paths within the HDF5 file to
+            read. If unspecified, all datasets found in the file are used.
+        concurrency: The maximum number of Ray tasks to run concurrently. Set this
+            to control number of tasks to run concurrently. This doesn't change the
+            total number of tasks run or the total number of output blocks. By default,
+            concurrency is dynamically decided based on the available resources.
+        override_num_blocks: Override the number of output blocks from all read tasks.
+            By default, the number of output blocks is dynamically decided based on
+            input data size and available resources. You shouldn't manually set this
+            value in most cases.
+        num_cpus: The number of CPUs to reserve for each parallel read worker.
+        num_gpus: The number of GPUs to reserve for each parallel read worker. For
+            example, specify `num_gpus=1` to request 1 GPU for each parallel read
+            worker.
+        memory: The heap memory in bytes to reserve for each parallel read worker.
+        ray_remote_args: kwargs passed to :meth:`~ray.remote` in the read tasks.
+
+    Returns:
+        A :class:`~ray.data.Dataset` where each row contains the selected dataset
+        path, dataset shape and dtype metadata, per-dimension chunk slice
+        bounds, and per-dimension trailing padding for one chunk.
+    """
     datasource = HDF5Datasource(
         path = path,
         chunk_shape = chunk_shape,
